@@ -226,34 +226,39 @@ type iterator struct {
 	fill Word
 }
 
-func (s *iterator) Next() (Word, bool) {
-	if s.n > 0 {
-		s.n--
-		return s.fill, true
-	}
-	if s.i >= len(s.b.words) {
-		if s.i == len(s.b.words) {
-			s.i++
-			return s.b.active, true
+func (b *Bitvec) Iterate() *Iterator {
+	length := (b.size / (Wordbits - 1)) + 1
+	offset := b.offset
+	itr := &Iterator{nil, length, offset}
+	i := 0
+	n := Word(0)
+	fill := Word(0)
+	itr.next = func() Word {
+		if n > 0 {
+			n--
+			return fill
 		}
-		return 0, false
-	}
-	w := s.b.words[s.i]
-	if w&FILL_BIT == 0 {
-		s.i++
-		return w, true
-	} else {
-		s.i++
-		s.n = (w & COUNT_BITS)
-		if w&ONES_BIT == 0 {
-			s.fill = Word(0)
+		if i >= len(b.words) {
+			if i == len(b.words) {
+				i++
+				return b.active
+			}
+			return 0
+		}
+		w := b.words[i]
+		if w&FILL_BIT == 0 {
+			i++
+			return w
 		} else {
-			s.fill = ^FILL_BIT
+			i++
+			n = (w & COUNT_BITS)
+			if w&ONES_BIT == 0 {
+				fill = 0
+			} else {
+				fill = ^FILL_BIT
+			}
+			return fill
 		}
-		return s.fill, true
 	}
-}
-
-func (b *Bitvec) Iterate() *iterator {
-	return &iterator{b, 0, 0, 0}
+	return itr
 }

@@ -1,67 +1,116 @@
+/*
+Copyright 2015 Davy Wybiral <davy.wybiral@gmail.com>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package bitvec
 
-type Iterator interface {
-	Next() (val Word, ok bool)
+type Iterator struct {
+	next   func() Word
+	length int
+	offset Word
 }
 
-type notItr struct {
-	x Iterator
+func ZeroIterator() *Iterator {
+	next := func() Word {
+		return Word(0)
+	}
+	return &Iterator{next, 0, 0}
 }
 
-func (s *notItr) Next() (Word, bool) {
-	val, ok := s.x.Next()
-	return ^(val | FILL_BIT), ok
-}
-
-func Not(x Iterator) Iterator {
-	return &notItr{x}
-}
-
-type binaryItr struct {
-	x, y Iterator
-}
-
-type andItr binaryItr
-type orItr binaryItr
-type xorItr binaryItr
-
-func (s *andItr) Next() (Word, bool) {
-	x, xok := s.x.Next()
-	y, yok := s.y.Next()
-	return x & y, xok && yok
-}
-
-func And(x, y Iterator) Iterator {
-	return &andItr{x, y}
-}
-
-func (s *orItr) Next() (Word, bool) {
-	x, xok := s.x.Next()
-	y, yok := s.y.Next()
-	return x | y, xok && yok
-}
-
-func Or(x, y Iterator) Iterator {
-	return &orItr{x, y}
-}
-
-func (s *xorItr) Next() (Word, bool) {
-	x, xok := s.x.Next()
-	y, yok := s.y.Next()
-	return x ^ y, xok && yok
-}
-
-func Xor(x, y Iterator) Iterator {
-	return &xorItr{x, y}
-}
-
-func Count(s Iterator) int {
-	count := 0
-	for {
-		x, ok := s.Next()
-		if !ok {
-			break
+func (x *Iterator) Not() *Iterator {
+	index := 0
+	next := func() Word {
+		val := ^x.next()
+		index++
+		if index == x.length {
+			val &= (^Word(0)) >> (Wordbits - x.offset)
 		}
+		return val & ^FILL_BIT
+	}
+	return &Iterator{next, x.length, x.offset}
+}
+
+func (x *Iterator) And(y *Iterator) *Iterator {
+	index := 0
+	length := x.length
+	offset := x.offset
+	if y.length < length {
+		length = y.length
+		offset = y.offset
+	} else if y.offset < offset {
+		offset = y.offset
+	}
+	itr := &Iterator{nil, length, offset}
+	itr.next = func() Word {
+		xval := x.next()
+		yval := y.next()
+		index++
+		if index == length {
+			itr.next = func() Word {
+				return 0
+			}
+		}
+		return xval & yval & ^FILL_BIT
+	}
+	return itr
+}
+
+func (x *Iterator) Or(y *Iterator) *Iterator {
+	index := 0
+	length := x.length
+	offset := x.offset
+	if y.length > length {
+		length = y.length
+		offset = y.offset
+	} else if y.offset > offset {
+		offset = y.offset
+	}
+	itr := &Iterator{nil, length, offset}
+	itr.next = func() Word {
+		xval := x.next()
+		yval := y.next()
+		index++
+		return (xval | yval) & ^FILL_BIT
+	}
+	return itr
+}
+
+func (x *Iterator) Xor(y *Iterator) *Iterator {
+	index := 0
+	length := x.length
+	offset := x.offset
+	if y.length > length {
+		length = y.length
+		offset = y.offset
+	} else if y.offset > offset {
+		offset = y.offset
+	}
+	itr := &Iterator{nil, length, offset}
+	itr.next = func() Word {
+		xval := x.next()
+		yval := y.next()
+		index++
+		return (xval ^ yval) & ^FILL_BIT
+	}
+	return itr
+}
+
+func (itr *Iterator) Count() int {
+	count := 0
+	for i := 0; i < itr.length; i++ {
+		x := itr.next()
 		for x > 0 {
 			count++
 			x &= (x - 1)
@@ -70,15 +119,12 @@ func Count(s Iterator) int {
 	return count
 }
 
-func Ids(s Iterator) chan int {
+func (itr *Iterator) Ids() chan int {
 	ch := make(chan int)
 	go func() {
 		id := 0
-		for {
-			w, ok := s.Next()
-			if !ok {
-				break
-			}
+		for i := 0; i < itr.length; i++ {
+			w := itr.next()
 			for i := Word(0); i < Wordbits-1; i++ {
 				if w&(1<<i) != 0 {
 					ch <- id + int(i)
