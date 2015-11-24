@@ -19,136 +19,129 @@ package bitvec
 import (
 	"math/rand"
 	"testing"
+	"time"
 )
 
-func TestNotP10(t *testing.T) {
-	b := NewBitvec()
-	n := 100000
-	p := 0.10
-	count := 0
-	for i := 0; i < n; i++ {
-		if rand.Float64() < p {
-			b.Set(i, true)
-		} else {
-			b.Set(i, false)
-			count++
-		}
-	}
-	if count != b.Iterate().Not().Count() {
-		t.Errorf("Incorrect count for Not")
-	}
+func init() {
+	rand.Seed(time.Now().UTC().UnixNano())
 }
 
-func TestAndP10(t *testing.T) {
-	b1 := NewBitvec()
-	b2 := NewBitvec()
-	n := 100000
-	p := 0.10
-	count := 0
-	for i := 0; i < n; i++ {
-		x1 := rand.Float64() < p
-		x2 := rand.Float64() < p
-		if x1 {
-			b1.Set(i, true)
-		}
-		if x2 {
-			b2.Set(i, true)
-		}
-		if x1 && x2 {
-			count++
-		}
-	}
-	if count != b1.Iterate().And(b2.Iterate()).Count() {
-		t.Errorf("Incorrect count for And")
-	}
-}
-
-func TestOrP10(t *testing.T) {
-	b1 := NewBitvec()
-	b2 := NewBitvec()
-	n := 100000
-	p := 0.10
-	count := 0
-	for i := 0; i < n; i++ {
-		x1 := rand.Float64() < p
-		x2 := rand.Float64() < p
-		if x1 {
-			b1.Set(i, true)
-		}
-		if x2 {
-			b2.Set(i, true)
-		}
-		if x1 || x2 {
-			count++
-		}
-	}
-	if count != b1.Iterate().Or(b2.Iterate()).Count() {
-		t.Errorf("Incorrect count for Or")
-	}
-}
-
-func TestXorP10(t *testing.T) {
-	b1 := NewBitvec()
-	b2 := NewBitvec()
-	n := 100000
-	p := 0.10
-	count := 0
-	for i := 0; i < n; i++ {
-		x1 := rand.Float64() < p
-		x2 := rand.Float64() < p
-		if x1 {
-			b1.Set(i, true)
-		}
-		if x2 {
-			b2.Set(i, true)
-		}
-		if (x1 || x2) && !(x1 && x2) {
-			count++
-		}
-	}
-	if count != b1.Iterate().Xor(b2.Iterate()).Count() {
-		t.Errorf("Incorrect count for Xor")
-	}
-}
-
-func TestBitvecP01(t *testing.T) {
-	b := NewBitvec()
-	n := 100000
-	p := 0.01
-	data := make([]int, 0)
-	for i := 0; i < n; i++ {
-		if rand.Float64() < p {
-			data = append(data, i)
-			b.Set(i, true)
-		}
-	}
-	ids := b.Iterate().Ids()
-	for i, x := range data {
-		y := <-ids
-		if x != y {
-			t.Errorf("Failed on the %dth value", i)
-			return
+func randomTest(fn func(n int, p float64) bool) {
+	sizes := []int{1, 100, 10000, 100000}
+	ratios := []float64{0.1, 0.3, 0.5, 0.8}
+	for _, n := range sizes {
+		for _, p := range ratios {
+			if !fn(n, p) {
+				return
+			}
 		}
 	}
 }
 
-func TestBitvecP50(t *testing.T) {
-	b := NewBitvec()
-	n := 100000
-	p := 0.50
-	data := make([]int, 0)
-	for i := 0; i < n; i++ {
-		if rand.Float64() < p {
-			data = append(data, i)
-			b.Set(i, true)
+func TestNot(t *testing.T) {
+	randomTest(func(n int, p float64) bool {
+		b := NewBitvec()
+		count := 0
+		for i := 0; i < n; i++ {
+			if rand.Float64() < p {
+				b.Set(i, true)
+			} else {
+				b.Set(i, false)
+				count++
+			}
 		}
-	}
-	ids := b.Iterate().Ids()
-	for i, x := range data {
-		y := <-ids
-		if x != y {
-			t.Errorf("Failed on the %dth value", i)
-			return
+		if count != b.Iterate().Not().Count() {
+			t.Errorf("Incorrect count for Not, n=%d, p=%f", n, p)
+			return false
 		}
-	}
+		return true
+	})
+}
+
+func TestAnd(t *testing.T) {
+	randomTest(func(n int, p float64) bool {
+		b1 := NewBitvec()
+		b2 := NewBitvec()
+		count := 0
+		for i := 0; i < n; i++ {
+			x1 := rand.Float64() < p
+			x2 := rand.Float64() < p
+			b1.Set(i, x1)
+			b2.Set(i, x2)
+			if x1 && x2 {
+				count++
+			}
+		}
+		if count != b1.Iterate().And(b2.Iterate()).Count() {
+			t.Errorf("Incorrect count for And")
+			return false
+		}
+		return true
+	})
+}
+
+func TestOr(t *testing.T) {
+	randomTest(func(n int, p float64) bool {
+		b1 := NewBitvec()
+		b2 := NewBitvec()
+		count := 0
+		for i := 0; i < n; i++ {
+			x1 := rand.Float64() < p
+			x2 := rand.Float64() < p
+			b1.Set(i, x1)
+			b2.Set(i, x2)
+			if x1 || x2 {
+				count++
+			}
+		}
+		if count != b1.Iterate().Or(b2.Iterate()).Count() {
+			t.Errorf("Incorrect count for Or")
+			return false
+		}
+		return true
+	})
+}
+
+func TestXor(t *testing.T) {
+	randomTest(func(n int, p float64) bool {
+		b1 := NewBitvec()
+		b2 := NewBitvec()
+		count := 0
+		for i := 0; i < n; i++ {
+			x1 := rand.Float64() < p
+			x2 := rand.Float64() < p
+			b1.Set(i, x1)
+			b2.Set(i, x2)
+			if x1 != x2 {
+				count++
+			}
+		}
+		if count != b1.Iterate().Xor(b2.Iterate()).Count() {
+			t.Errorf("Incorrect count for Xor")
+			return false
+		}
+		return true
+	})
+}
+
+func TestIds(t *testing.T) {
+	randomTest(func(n int, p float64) bool {
+		b := NewBitvec()
+		data := make([]int, 0)
+		for i := 0; i < n; i++ {
+			if rand.Float64() < p {
+				data = append(data, i)
+				b.Set(i, true)
+			}
+		}
+		ids := b.Iterate().Ids()
+		for i, x := range data {
+			y := <-ids
+			if x != y {
+				t.Errorf("Failed on the %dth value", i)
+				return false
+			}
+		}
+		return true
+	})
 }

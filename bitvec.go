@@ -16,9 +16,8 @@ limitations under the License.
 
 package bitvec
 
-type Word uint32
-
-const Wordbits = 32
+type Word uint32    // Word datatype
+const Wordbits = 32 // Number of bits per word
 
 const (
 	FILL_BIT      = Word(1 << (Wordbits - 1))       // Mask for fill flag
@@ -29,14 +28,17 @@ const (
 	ZEROS_LITERAL = Word(0)                         // Filled zeros literal
 )
 
+// Is this word a fill of zeros?
 func isZerosFill(x Word) bool {
 	return x & ^COUNT_BITS == FILL_BIT
 }
 
+// Is this word a fill of ones?
 func isOnesFill(x Word) bool {
 	return x & ^COUNT_BITS == ^COUNT_BITS
 }
 
+// Can this fill count be incremented without overflowing?
 func hasSpace(x Word) bool {
 	return x&COUNT_BITS < FILL_MAX
 }
@@ -48,8 +50,9 @@ type Bitvec struct {
 	words  []Word // Allocated words
 }
 
+// Return a new *BitVec of size 0
 func NewBitvec() *Bitvec {
-	return &Bitvec{size: 0, active: Word(0), offset: Word(0), words: make([]Word, 0, 64)}
+	return &Bitvec{size: 0, active: Word(0), offset: Word(0), words: make([]Word, 0)}
 }
 
 func (b *Bitvec) append(x bool) {
@@ -86,36 +89,25 @@ func (b *Bitvec) flushWord() {
 	b.active = Word(0)
 }
 
+// Set bit at id, expanding as needed
 func (b *Bitvec) Set(id int, x bool) bool {
 	for id > b.size {
-		// There's a better way to do this, but for now...
-		// Grow the vector one-by-one.
+		// Bitvec needs to grow to set at id
+		// There's a better way to do this...
 		b.append(false)
 	}
 	if id == b.size {
+		// id is just after the end of Bitvec so append
 		b.append(x)
 		return x
 	}
+	// Not an append, handle update
 	return b.update(id, x)
 }
 
 func (b *Bitvec) update(id int, x bool) bool {
-	index := id / (Wordbits - 1)
-	offset := Word(id % (Wordbits - 1))
-	i := 0
-	j := 0
-	n := len(b.words)
-	for ; i < n; i++ {
-		nj := 1
-		if b.words[i]&FILL_BIT != 0 {
-			nj += int(b.words[i] & COUNT_BITS)
-		}
-		if j+nj > index {
-			break
-		}
-		j += nj
-	}
-	if i == n {
+	index, offset, i, j := b.findWord(id)
+	if i == len(b.words) {
 		// Modify active Word
 		old := b.active
 		if x {
@@ -127,7 +119,7 @@ func (b *Bitvec) update(id int, x bool) bool {
 	} else if b.words[i]&FILL_BIT != 0 {
 		// Modify fill Word
 		if (x && b.words[i]&ONES_BIT == 0) || !(x || b.words[i]&ONES_BIT == 0) {
-			// Break this fill
+			// x doesn't match fill type, break this fill
 			b.updateFill(i, Word(index-j), offset, x)
 			return true
 		}
@@ -168,7 +160,9 @@ func (b *Bitvec) updateLiteral(i int, offset Word, x bool) bool {
 	if x {
 		b.words[i] |= 1 << offset
 		if b.words[i] == ONES_LITERAL {
+			// Our update made this literal a fill...
 			if i > 0 && isOnesFill(b.words[i-1]) && hasSpace(b.words[i-1]) {
+				// Previous word is matching fill with space to increment
 				b.words[i-1]++
 				n := len(b.words) - 1
 				copy(b.words[i:], b.words[i+1:])
@@ -181,7 +175,9 @@ func (b *Bitvec) updateLiteral(i int, offset Word, x bool) bool {
 	} else {
 		b.words[i] &= ^(1 << offset)
 		if b.words[i] == ZEROS_LITERAL {
+			// Our update made this literal a fill...
 			if i > 0 && isZerosFill(b.words[i-1]) && hasSpace(b.words[i-1]) {
+				// Previous word is matching fill with space to increment
 				b.words[i-1]++
 				n := len(b.words) - 1
 				copy(b.words[i:], b.words[i+1:])
@@ -195,35 +191,31 @@ func (b *Bitvec) updateLiteral(i int, offset Word, x bool) bool {
 	return b.words[i] != old
 }
 
-func (b *Bitvec) Get(id int) bool {
-	index := id / (Wordbits - 1)
-	offset := Word(id % (Wordbits - 1))
-	i := 0
-	j := 0
+func (b *Bitvec) findWord(id int) (index int, offset Word, i, j int) {
+	index = id / (Wordbits - 1)
+	offset = Word(id % (Wordbits - 1))
 	n := len(b.words)
 	for ; i < n; i++ {
-		nj := 1
+		nextj := j + 1
 		if b.words[i]&FILL_BIT != 0 {
-			nj += int(b.words[i] & COUNT_BITS)
+			nextj += int(b.words[i] & COUNT_BITS)
 		}
-		if j+nj > index {
+		if nextj > index {
 			break
 		}
-		j += nj
+		j = nextj
 	}
-	if i == n {
+	return
+}
+
+func (b *Bitvec) Get(id int) bool {
+	_, offset, i, _ := b.findWord(id)
+	if i == len(b.words) {
 		return b.active&(1<<offset) != 0
 	} else if b.words[i]&FILL_BIT != 0 {
 		return b.words[i]&ONES_BIT != 0
 	}
 	return b.words[i]&(1<<offset) != 0
-}
-
-type iterator struct {
-	b    *Bitvec
-	i    int
-	n    Word
-	fill Word
 }
 
 func (b *Bitvec) Iterate() *Iterator {
