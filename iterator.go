@@ -17,9 +17,9 @@ limitations under the License.
 package bitvec
 
 type Iterator struct {
-	next   func() Word
-	length int
-	offset Word
+	next   func() Word // Function returning next word
+	length int // Length in number of words
+	offset Word // Offset bit in active word
 }
 
 func ZeroIterator() *Iterator {
@@ -58,6 +58,7 @@ func (x *Iterator) And(y *Iterator) *Iterator {
 		yval := y.next()
 		index++
 		if index == length {
+			// All zero after this point
 			itr.next = func() Word {
 				return 0
 			}
@@ -107,6 +108,7 @@ func (x *Iterator) Xor(y *Iterator) *Iterator {
 	return itr
 }
 
+// Sparse bit counter, is there a better option?
 func (itr *Iterator) Count() int {
 	count := 0
 	for i := 0; i < itr.length; i++ {
@@ -119,6 +121,7 @@ func (itr *Iterator) Count() int {
 	return count
 }
 
+// Return channel of Ids for 1 bits
 func (itr *Iterator) Ids() chan int {
 	ch := make(chan int)
 	go func() {
