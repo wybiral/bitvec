@@ -40,7 +40,7 @@ func randomTest(fn func(n int, p float64) bool) {
 
 func TestNot(t *testing.T) {
 	randomTest(func(n int, p float64) bool {
-		b := NewBitvec()
+		b := New()
 		count := 0
 		for i := 0; i < n; i++ {
 			if rand.Float64() < p {
@@ -60,8 +60,8 @@ func TestNot(t *testing.T) {
 
 func TestAnd(t *testing.T) {
 	randomTest(func(n int, p float64) bool {
-		b1 := NewBitvec()
-		b2 := NewBitvec()
+		b1 := New()
+		b2 := New()
 		count := 0
 		for i := 0; i < n; i++ {
 			x1 := rand.Float64() < p
@@ -82,8 +82,8 @@ func TestAnd(t *testing.T) {
 
 func TestOr(t *testing.T) {
 	randomTest(func(n int, p float64) bool {
-		b1 := NewBitvec()
-		b2 := NewBitvec()
+		b1 := New()
+		b2 := New()
 		count := 0
 		for i := 0; i < n; i++ {
 			x1 := rand.Float64() < p
@@ -104,8 +104,8 @@ func TestOr(t *testing.T) {
 
 func TestXor(t *testing.T) {
 	randomTest(func(n int, p float64) bool {
-		b1 := NewBitvec()
-		b2 := NewBitvec()
+		b1 := New()
+		b2 := New()
 		count := 0
 		for i := 0; i < n; i++ {
 			x1 := rand.Float64() < p
@@ -126,7 +126,7 @@ func TestXor(t *testing.T) {
 
 func TestIds(t *testing.T) {
 	randomTest(func(n int, p float64) bool {
-		b := NewBitvec()
+		b := New()
 		data := make([]int, 0)
 		for i := 0; i < n; i++ {
 			if rand.Float64() < p {

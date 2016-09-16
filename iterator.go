@@ -18,8 +18,8 @@ package bitvec
 
 type Iterator struct {
 	next   func() Word // Function returning next word
-	length int // Length in number of words
-	offset Word // Offset bit in active word
+	length int         // Length in number of words
+	offset Word        // Offset bit in active word
 }
 
 func ZeroIterator() *Iterator {
@@ -35,7 +35,7 @@ func (x *Iterator) Not() *Iterator {
 		val := ^x.next()
 		index++
 		if index == x.length {
-			val &= (^Word(0)) >> (Wordbits - x.offset)
+			val &= (^Word(0)) >> (BITS - x.offset)
 		}
 		return val & ^FILL_BIT
 	}
@@ -128,12 +128,12 @@ func (itr *Iterator) Ids() chan int {
 		id := 0
 		for i := 0; i < itr.length; i++ {
 			w := itr.next()
-			for i := Word(0); i < Wordbits-1; i++ {
+			for i := Word(0); i < BITS-1; i++ {
 				if w&(1<<i) != 0 {
 					ch <- id + int(i)
 				}
 			}
-			id += Wordbits - 1
+			id += BITS - 1
 		}
 		close(ch)
 	}()

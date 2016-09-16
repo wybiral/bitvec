@@ -16,16 +16,16 @@ limitations under the License.
 
 package bitvec
 
-type Word uint32    // Word datatype
-const Wordbits = 32 // Number of bits per word
+type Word uint64
 
 const (
-	FILL_BIT      = Word(1 << (Wordbits - 1))       // Mask for fill flag
-	ONES_BIT      = Word(1 << (Wordbits - 2))       // Mask for ones flag
-	FILL_MAX      = Word((2 << (Wordbits - 3)) - 1) // Maximum fill count
-	COUNT_BITS    = ^(FILL_BIT | ONES_BIT)          // Mask for fill count bits
-	ONES_LITERAL  = ^FILL_BIT                       // Filled ones literal
-	ZEROS_LITERAL = Word(0)                         // Filled zeros literal
+	BITS          = 64                          // Bits per word
+	FILL_BIT      = Word(1 << (BITS - 1))       // Mask for fill flag
+	ONES_BIT      = Word(1 << (BITS - 2))       // Mask for ones flag
+	FILL_MAX      = Word((2 << (BITS - 3)) - 1) // Maximum fill count
+	COUNT_BITS    = ^(FILL_BIT | ONES_BIT)      // Mask for fill count bits
+	ONES_LITERAL  = ^FILL_BIT                   // Filled ones literal
+	ZEROS_LITERAL = Word(0)                     // Filled zeros literal
 )
 
 // Is this word a fill of zeros?
@@ -51,8 +51,13 @@ type Bitvec struct {
 }
 
 // Return a new *BitVec of size 0
-func NewBitvec() *Bitvec {
-	return &Bitvec{size: 0, active: Word(0), offset: Word(0), words: make([]Word, 0)}
+func New() *Bitvec {
+	return &Bitvec{
+		size:   0,
+		active: Word(0),
+		offset: Word(0),
+		words:  make([]Word, 0),
+	}
 }
 
 func (b *Bitvec) append(x bool) {
@@ -61,7 +66,7 @@ func (b *Bitvec) append(x bool) {
 	}
 	b.offset++
 	b.size++
-	if b.offset == Wordbits-1 {
+	if b.offset == BITS-1 {
 		b.flushWord()
 	}
 }
@@ -91,10 +96,14 @@ func (b *Bitvec) flushWord() {
 
 // Set bit at id, expanding as needed
 func (b *Bitvec) Set(id int, x bool) bool {
-	for id > b.size {
-		// Bitvec needs to grow to set at id
-		// There's a better way to do this...
-		b.append(false)
+	if id > b.size {
+		offset := int(b.offset) + id - b.size
+		words := offset / (BITS - 1)
+		for i := 0; i < words; i++ {
+			b.flushWord()
+		}
+		b.offset = Word(offset % (BITS - 1))
+		b.size = id
 	}
 	if id == b.size {
 		// id is just after the end of Bitvec so append
@@ -192,8 +201,8 @@ func (b *Bitvec) updateLiteral(i int, offset Word, x bool) bool {
 }
 
 func (b *Bitvec) findWord(id int) (index int, offset Word, i, j int) {
-	index = id / (Wordbits - 1)
-	offset = Word(id % (Wordbits - 1))
+	index = id / (BITS - 1)
+	offset = Word(id % (BITS - 1))
 	n := len(b.words)
 	for ; i < n; i++ {
 		nextj := j + 1
@@ -219,7 +228,7 @@ func (b *Bitvec) Get(id int) bool {
 }
 
 func (b *Bitvec) Iterate() *Iterator {
-	length := (b.size / (Wordbits - 1)) + 1
+	length := (b.size / (BITS - 1)) + 1
 	offset := b.offset
 	itr := &Iterator{nil, length, offset}
 	i := 0
