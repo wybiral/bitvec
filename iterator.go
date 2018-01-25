@@ -16,6 +16,10 @@ limitations under the License.
 
 package bitvec
 
+import (
+	"math/bits"
+)
+
 type Iterator struct {
 	next   func() Word // Function returning next word
 	length int         // Length in number of words
@@ -35,9 +39,9 @@ func (x *Iterator) Not() *Iterator {
 		val := ^x.next()
 		index++
 		if index == x.length {
-			val &= (^Word(0)) >> (BITS - x.offset)
+			val &= (^Word(0)) >> (bitLength - x.offset)
 		}
-		return val & ^FILL_BIT
+		return val & ^fillFlag
 	}
 	return &Iterator{next, x.length, x.offset}
 }
@@ -63,7 +67,7 @@ func (x *Iterator) And(y *Iterator) *Iterator {
 				return 0
 			}
 		}
-		return xval & yval & ^FILL_BIT
+		return xval & yval & ^fillFlag
 	}
 	return itr
 }
@@ -83,7 +87,7 @@ func (x *Iterator) Or(y *Iterator) *Iterator {
 		xval := x.next()
 		yval := y.next()
 		index++
-		return (xval | yval) & ^FILL_BIT
+		return (xval | yval) & ^fillFlag
 	}
 	return itr
 }
@@ -103,7 +107,7 @@ func (x *Iterator) Xor(y *Iterator) *Iterator {
 		xval := x.next()
 		yval := y.next()
 		index++
-		return (xval ^ yval) & ^FILL_BIT
+		return (xval ^ yval) & ^fillFlag
 	}
 	return itr
 }
@@ -112,11 +116,7 @@ func (x *Iterator) Xor(y *Iterator) *Iterator {
 func (itr *Iterator) Count() int {
 	count := 0
 	for i := 0; i < itr.length; i++ {
-		x := itr.next()
-		for x > 0 {
-			count++
-			x &= (x - 1)
-		}
+		count += bits.OnesCount(uint(itr.next()))
 	}
 	return count
 }
@@ -128,12 +128,12 @@ func (itr *Iterator) Ids() chan int {
 		id := 0
 		for i := 0; i < itr.length; i++ {
 			w := itr.next()
-			for i := Word(0); i < BITS-1; i++ {
+			for i := Word(0); i < bitLength-1; i++ {
 				if w&(1<<i) != 0 {
 					ch <- id + int(i)
 				}
 			}
-			id += BITS - 1
+			id += bitLength - 1
 		}
 		close(ch)
 	}()

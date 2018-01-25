@@ -27,8 +27,8 @@ func init() {
 }
 
 func randomTest(fn func(n int, p float64) bool) {
-	sizes := []int{1, 100, 10000, 100000}
-	ratios := []float64{0.1, 0.3, 0.5, 0.8}
+	sizes := []int{100, 10000, 100000, 1000000}
+	ratios := []float64{0.1, 0.25, 0.5, 0.75, 0.9}
 	for _, n := range sizes {
 		for _, p := range ratios {
 			if !fn(n, p) {
