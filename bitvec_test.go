@@ -149,3 +149,20 @@ func TestIndices(t *testing.T) {
 		return true
 	})
 }
+
+func TestGet(t *testing.T) {
+	for n := 0; n < bitLength * 3; n++ {
+		b := New()
+		for i := 0; i < n; i++ {
+			b.Set(i, true)
+		}
+		for i := 0; i < n; i++ {
+			if !b.Get(i) {
+				t.Errorf("Expected Get(%d) to return true", i)
+			}
+		}
+		if b.Get(n) {
+			t.Errorf("Expected Get(n) to return false")
+		}
+	}
+}

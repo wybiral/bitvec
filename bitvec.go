@@ -1,22 +1,33 @@
-/*
-Copyright 2015 Davy Wybiral <davy.wybiral@gmail.com>
+// Copyright 2015 Davy Wybiral <davy.wybiral@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// This package implements compressed bitvectors using the WAH method.
 
 package bitvec
 
 type Word uint64
+
+// There are two types of words denoted by the highest bit known as the "fill
+// flag" or "signal bit".
+//
+// Literal words have a fill flag of 0 and the remaining bits are to be taken
+// literally as the bit pattern for that word.
+//
+// Fill words have a fill flag of 1 and the next highest bit is the "ones flag"
+// or "pattern bit". If this bit is set to 0 then this is a 0-fill word and if
+// it's set to 1 then this is a 1-fill word. The remaining bits are used as an
+// integer count for the number of repetitions for this fill.
 
 const (
 	bitLength    = 64                               // Bits per word
@@ -44,9 +55,9 @@ func hasSpace(x Word) bool {
 }
 
 type Bitvec struct {
-	size   int   // Number of bits used (zero and one)
+	size   int    // Number of bits used (zero and one)
 	active Word   // Currently active Word
-	offset int   // Which bit we're at in the active Word
+	offset int    // Which bit we're at in the active Word
 	words  []Word // Allocated words
 }
 
@@ -60,6 +71,7 @@ func New() *Bitvec {
 	}
 }
 
+// Append boolean bit to vector
 func (b *Bitvec) append(x bool) {
 	if x {
 		b.active |= 1 << uint(b.offset)
@@ -71,6 +83,7 @@ func (b *Bitvec) append(x bool) {
 	}
 }
 
+// Adds current active word to rest of vector and creates new active word
 func (b *Bitvec) flushWord() {
 	top := len(b.words) - 1
 	if b.active == zerosLiteral {
@@ -194,6 +207,11 @@ func (b *Bitvec) updateLiteral(i int, offset int, x bool) {
 	}
 }
 
+// Find which word a bit is located in.
+// index is the word index assuming all words are literal (ignores fills)
+// offset is the bit offset
+// i is the actual index into word array (can extend beyond array length)
+// j is the index of the previous word in the array (ignores the last fill)
 func (b *Bitvec) findWord(id int) (index, offset, i, j int) {
 	index = id / (bitLength - 1)
 	offset = id % (bitLength - 1)
@@ -204,66 +222,32 @@ func (b *Bitvec) findWord(id int) (index, offset, i, j int) {
 			nextj += int(b.words[i] & countMask)
 		}
 		if nextj > index {
-			break
+			return
 		}
 		j = nextj
+	}
+	// Correct for OOB id
+	if j + 1 < index {
+		i++
 	}
 	return
 }
 
+// Get state of bit at id
 func (b *Bitvec) Get(id int) bool {
 	_, offset, i, _ := b.findWord(id)
 	if i == len(b.words) {
 		return b.active&(1<<uint(offset)) != 0
-	} else if b.words[i]&fillFlag != 0 {
+	}
+	if i > len(b.words) {
+		return false
+	}
+	if b.words[i]&fillFlag != 0 {
 		return b.words[i]&onesFlag != 0
 	}
 	return b.words[i]&(1<<uint(offset)) != 0
 }
 
 func (b *Bitvec) Iterate() Iterator {
-	return &bitvecIterator{
-		b: b,
-		index: 0,
-		count: 0,
-		fill: Word(0),
-	}
-}
-
-type bitvecIterator struct {
-	b *Bitvec
-	index int
-	count int
-	fill Word
-}
-
-func (itr *bitvecIterator) Next() (Word, int) {
-	// Iterating fill count
-	if itr.count > 0 {
-		itr.count--
-		return itr.fill, bitLength - 1
-	}
-	if itr.index < len(itr.b.words) {
-		w := itr.b.words[itr.index]
-		itr.index++
-		// Literal word
-		if w&fillFlag == 0 {
-			return w, bitLength - 1
-		}
-		// Fill word
-		itr.count = int(w & countMask)
-		if w&onesFlag == 0 {
-			itr.fill = 0
-		} else {
-			itr.fill = ^fillFlag
-		}
-		return itr.fill, bitLength - 1
-	}
-	// Active (partial) literal word
-	if itr.index == len(itr.b.words) {
-		itr.index++
-		return itr.b.active, itr.b.offset
-	}
-	// End of stream
-	return Word(0), 0
+	return &bitvecIterator{b: b}
 }
