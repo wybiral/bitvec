@@ -44,9 +44,9 @@ func hasSpace(x Word) bool {
 }
 
 type Bitvec struct {
-	size   int    // Number of bits used (zero and one)
+	size   int   // Number of bits used (zero and one)
 	active Word   // Currently active Word
-	offset Word   // Which bit we're at in the active Word
+	offset int   // Which bit we're at in the active Word
 	words  []Word // Allocated words
 }
 
@@ -55,14 +55,14 @@ func New() *Bitvec {
 	return &Bitvec{
 		size:   0,
 		active: Word(0),
-		offset: Word(0),
+		offset: 0,
 		words:  make([]Word, 0),
 	}
 }
 
 func (b *Bitvec) append(x bool) {
 	if x {
-		b.active |= 1 << b.offset
+		b.active |= 1 << uint(b.offset)
 	}
 	b.offset++
 	b.size++
@@ -90,19 +90,19 @@ func (b *Bitvec) flushWord() {
 	} else {
 		b.words = append(b.words, b.active)
 	}
-	b.offset = Word(0)
 	b.active = Word(0)
+	b.offset = 0
 }
 
 // Set bit at id, expanding as needed
 func (b *Bitvec) Set(id int, x bool) {
 	if id > b.size {
-		offset := int(b.offset) + id - b.size
+		offset := b.offset + id - b.size
 		words := offset / (bitLength - 1)
 		for i := 0; i < words; i++ {
 			b.flushWord()
 		}
-		b.offset = Word(offset % (bitLength - 1))
+		b.offset = offset % (bitLength - 1)
 		b.size = id
 	}
 	if id == b.size {
@@ -119,9 +119,9 @@ func (b *Bitvec) update(id int, x bool) {
 	if i == len(b.words) {
 		// Modify active Word
 		if x {
-			b.active |= 1 << offset
+			b.active |= 1 << uint(offset)
 		} else {
-			b.active &= ^(1 << offset)
+			b.active &= ^(1 << uint(offset))
 		}
 	} else if b.words[i]&fillFlag != 0 {
 		// Modify fill Word
@@ -135,7 +135,7 @@ func (b *Bitvec) update(id int, x bool) {
 	}
 }
 
-func (b *Bitvec) updateFill(i int, target Word, offset Word, x bool) {
+func (b *Bitvec) updateFill(i int, target Word, offset int, x bool) {
 	head := b.words[i] & (fillFlag | onesFlag)
 	size := b.words[i] & countMask
 	if target > 0 {
@@ -147,9 +147,9 @@ func (b *Bitvec) updateFill(i int, target Word, offset Word, x bool) {
 	}
 	// Add the literal
 	if x {
-		b.words[i] = (1 << offset)
+		b.words[i] = (1 << uint(offset))
 	} else {
-		b.words[i] = (^fillFlag) ^ (1 << offset)
+		b.words[i] = (^fillFlag) ^ (1 << uint(offset))
 	}
 	if size > target {
 		// There's a fill after the literal
@@ -160,9 +160,9 @@ func (b *Bitvec) updateFill(i int, target Word, offset Word, x bool) {
 	}
 }
 
-func (b *Bitvec) updateLiteral(i int, offset Word, x bool) {
+func (b *Bitvec) updateLiteral(i int, offset int, x bool) {
 	if x {
-		b.words[i] |= 1 << offset
+		b.words[i] |= 1 << uint(offset)
 		if b.words[i] == onesLiteral {
 			// Our update made this literal a fill...
 			if i > 0 && isOnesFill(b.words[i-1]) && hasSpace(b.words[i-1]) {
@@ -177,7 +177,7 @@ func (b *Bitvec) updateLiteral(i int, offset Word, x bool) {
 			}
 		}
 	} else {
-		b.words[i] &= ^(1 << offset)
+		b.words[i] &= ^(1 << uint(offset))
 		if b.words[i] == zerosLiteral {
 			// Our update made this literal a fill...
 			if i > 0 && isZerosFill(b.words[i-1]) && hasSpace(b.words[i-1]) {
@@ -194,9 +194,9 @@ func (b *Bitvec) updateLiteral(i int, offset Word, x bool) {
 	}
 }
 
-func (b *Bitvec) findWord(id int) (index int, offset Word, i, j int) {
+func (b *Bitvec) findWord(id int) (index, offset, i, j int) {
 	index = id / (bitLength - 1)
-	offset = Word(id % (bitLength - 1))
+	offset = id % (bitLength - 1)
 	n := len(b.words)
 	for ; i < n; i++ {
 		nextj := j + 1
@@ -214,46 +214,56 @@ func (b *Bitvec) findWord(id int) (index int, offset Word, i, j int) {
 func (b *Bitvec) Get(id int) bool {
 	_, offset, i, _ := b.findWord(id)
 	if i == len(b.words) {
-		return b.active&(1<<offset) != 0
+		return b.active&(1<<uint(offset)) != 0
 	} else if b.words[i]&fillFlag != 0 {
 		return b.words[i]&onesFlag != 0
 	}
-	return b.words[i]&(1<<offset) != 0
+	return b.words[i]&(1<<uint(offset)) != 0
 }
 
-func (b *Bitvec) Iterate() *Iterator {
-	length := (b.size / (bitLength - 1)) + 1
-	offset := b.offset
-	itr := &Iterator{nil, length, offset}
-	i := 0
-	n := Word(0)
-	fill := Word(0)
-	itr.next = func() Word {
-		if n > 0 {
-			n--
-			return fill
-		}
-		if i >= len(b.words) {
-			if i == len(b.words) {
-				i++
-				return b.active
-			}
-			return 0
-		}
-		w := b.words[i]
-		if w&fillFlag == 0 {
-			i++
-			return w
-		} else {
-			i++
-			n = (w & countMask)
-			if w&onesFlag == 0 {
-				fill = 0
-			} else {
-				fill = ^fillFlag
-			}
-			return fill
-		}
+func (b *Bitvec) Iterate() Iterator {
+	return &bitvecIterator{
+		b: b,
+		index: 0,
+		count: 0,
+		fill: Word(0),
 	}
-	return itr
+}
+
+type bitvecIterator struct {
+	b *Bitvec
+	index int
+	count int
+	fill Word
+}
+
+func (itr *bitvecIterator) Next() (Word, int) {
+	// Iterating fill count
+	if itr.count > 0 {
+		itr.count--
+		return itr.fill, bitLength - 1
+	}
+	if itr.index < len(itr.b.words) {
+		w := itr.b.words[itr.index]
+		itr.index++
+		// Literal word
+		if w&fillFlag == 0 {
+			return w, bitLength - 1
+		}
+		// Fill word
+		itr.count = int(w & countMask)
+		if w&onesFlag == 0 {
+			itr.fill = 0
+		} else {
+			itr.fill = ^fillFlag
+		}
+		return itr.fill, bitLength - 1
+	}
+	// Active (partial) literal word
+	if itr.index == len(itr.b.words) {
+		itr.index++
+		return itr.b.active, itr.b.offset
+	}
+	// End of stream
+	return Word(0), 0
 }

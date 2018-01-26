@@ -50,8 +50,9 @@ func TestNot(t *testing.T) {
 				count++
 			}
 		}
-		if count != b.Iterate().Not().Count() {
-			t.Errorf("Incorrect count for Not, n=%d, p=%f", n, p)
+		result := Count(Not(b.Iterate()))
+		if count != result {
+			t.Errorf("Incorrect count for Not, %d != %d", result, count)
 			return false
 		}
 		return true
@@ -72,8 +73,9 @@ func TestAnd(t *testing.T) {
 				count++
 			}
 		}
-		if count != b1.Iterate().And(b2.Iterate()).Count() {
-			t.Errorf("Incorrect count for And")
+		result := Count(And(b1.Iterate(), b2.Iterate()))
+		if count != result {
+			t.Errorf("Incorrect count for And, %d != %d", result, count)
 			return false
 		}
 		return true
@@ -94,8 +96,9 @@ func TestOr(t *testing.T) {
 				count++
 			}
 		}
-		if count != b1.Iterate().Or(b2.Iterate()).Count() {
-			t.Errorf("Incorrect count for Or")
+		result := Count(Or(b1.Iterate(), b2.Iterate()))
+		if count != result {
+			t.Errorf("Incorrect count for Or, %d != %d", result, count)
 			return false
 		}
 		return true
@@ -116,15 +119,16 @@ func TestXor(t *testing.T) {
 				count++
 			}
 		}
-		if count != b1.Iterate().Xor(b2.Iterate()).Count() {
-			t.Errorf("Incorrect count for Xor")
+		result := Count(Xor(b1.Iterate(), b2.Iterate()))
+		if count != result {
+			t.Errorf("Incorrect count for Xor, %d != %d", result, count)
 			return false
 		}
 		return true
 	})
 }
 
-func TestIds(t *testing.T) {
+func TestIndices(t *testing.T) {
 	randomTest(func(n int, p float64) bool {
 		b := New()
 		data := make([]int, 0)
@@ -134,11 +138,11 @@ func TestIds(t *testing.T) {
 				b.Set(i, true)
 			}
 		}
-		ids := b.Iterate().Ids()
-		for i, x := range data {
+		ids := Indices(b.Iterate())
+		for _, x := range data {
 			y := <-ids
 			if x != y {
-				t.Errorf("Failed on the %dth value", i)
+				t.Errorf("Incorrect index, %d != %d", x, y)
 				return false
 			}
 		}

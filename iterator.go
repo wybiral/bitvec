@@ -20,116 +20,116 @@ import (
 	"math/bits"
 )
 
-type Iterator struct {
-	next   func() Word // Function returning next word
-	length int         // Length in number of words
-	offset Word        // Offset bit in active word
+type Iterator interface {
+	Next() (Word, int)
 }
 
-func ZeroIterator() *Iterator {
-	next := func() Word {
-		return Word(0)
-	}
-	return &Iterator{next, 0, 0}
+type notIterator struct {
+	x Iterator
 }
 
-func (x *Iterator) Not() *Iterator {
-	index := 0
-	next := func() Word {
-		val := ^x.next()
-		index++
-		if index == x.length {
-			val &= (^Word(0)) >> (bitLength - x.offset)
-		}
-		return val & ^fillFlag
-	}
-	return &Iterator{next, x.length, x.offset}
+func (itr *notIterator) Next() (Word, int) {
+	w, n := itr.x.Next()
+	return ^fillFlag ^ w, n
 }
 
-func (x *Iterator) And(y *Iterator) *Iterator {
-	index := 0
-	length := x.length
-	offset := x.offset
-	if y.length < length {
-		length = y.length
-		offset = y.offset
-	} else if y.offset < offset {
-		offset = y.offset
-	}
-	itr := &Iterator{nil, length, offset}
-	itr.next = func() Word {
-		xval := x.next()
-		yval := y.next()
-		index++
-		if index == length {
-			// All zero after this point
-			itr.next = func() Word {
-				return 0
-			}
-		}
-		return xval & yval & ^fillFlag
-	}
-	return itr
+func Not(x Iterator) Iterator {
+	return &notIterator{x}
 }
 
-func (x *Iterator) Or(y *Iterator) *Iterator {
-	index := 0
-	length := x.length
-	offset := x.offset
-	if y.length > length {
-		length = y.length
-		offset = y.offset
-	} else if y.offset > offset {
-		offset = y.offset
-	}
-	itr := &Iterator{nil, length, offset}
-	itr.next = func() Word {
-		xval := x.next()
-		yval := y.next()
-		index++
-		return (xval | yval) & ^fillFlag
-	}
-	return itr
+
+type andIterator struct {
+	x Iterator
+	y Iterator
 }
 
-func (x *Iterator) Xor(y *Iterator) *Iterator {
-	index := 0
-	length := x.length
-	offset := x.offset
-	if y.length > length {
-		length = y.length
-		offset = y.offset
-	} else if y.offset > offset {
-		offset = y.offset
+func (itr *andIterator) Next() (Word, int) {
+	var n int
+	wx, nx := itr.x.Next()
+	wy, ny := itr.y.Next()
+	if nx < ny {
+		n = nx
+	} else {
+		n = ny
 	}
-	itr := &Iterator{nil, length, offset}
-	itr.next = func() Word {
-		xval := x.next()
-		yval := y.next()
-		index++
-		return (xval ^ yval) & ^fillFlag
-	}
-	return itr
+	return wx & wy, n
 }
 
-// Sparse bit counter, is there a better option?
-func (itr *Iterator) Count() int {
+func And(x, y Iterator) Iterator {
+	return &andIterator{x, y}
+}
+
+
+type orIterator struct {
+	x Iterator
+	y Iterator
+}
+
+func (itr *orIterator) Next() (Word, int) {
+	var n int
+	wx, nx := itr.x.Next()
+	wy, ny := itr.y.Next()
+	if nx < ny {
+		n = nx
+	} else {
+		n = ny
+	}
+	return wx | wy, n
+}
+
+func Or(x, y Iterator) Iterator {
+	return &orIterator{x, y}
+}
+
+
+type xorIterator struct {
+	x Iterator
+	y Iterator
+}
+
+func (itr *xorIterator) Next() (Word, int) {
+	var n int
+	wx, nx := itr.x.Next()
+	wy, ny := itr.y.Next()
+	if nx < ny {
+		n = nx
+	} else {
+		n = ny
+	}
+	return wx ^ wy, n
+}
+
+func Xor(x, y Iterator) Iterator {
+	return &xorIterator{x, y}
+}
+
+
+func Count(itr Iterator) int {
 	count := 0
-	for i := 0; i < itr.length; i++ {
-		count += bits.OnesCount(uint(itr.next()))
+	for {
+		w, n := itr.Next()
+		if n == 0 {
+			break
+		}
+		if n < bitLength - 1 {
+			w &= (1 << uint(n)) - 1
+		}
+		count += bits.OnesCount(uint(w))
 	}
 	return count
 }
 
-// Return channel of Ids for 1 bits
-func (itr *Iterator) Ids() chan int {
+func Indices(itr Iterator) chan int {
 	ch := make(chan int)
 	go func() {
 		id := 0
-		for i := 0; i < itr.length; i++ {
-			w := itr.next()
-			for i := Word(0); i < bitLength-1; i++ {
-				if w&(1<<i) != 0 {
+		for {
+			w, n := itr.Next()
+			if n == 0 {
+				break
+			}
+			for i := 0; i < n; i++ {
+				if w & (1 << uint(i)) != 0 {
 					ch <- id + int(i)
 				}
 			}
