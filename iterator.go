@@ -20,91 +20,86 @@ import (
 	"math/bits"
 )
 
+/*
+Iteration is done using a Next() method that returns a literal word and the
+number of bits it represents.
+
+For partial literals that means the number will be less than bitLength - 1 (the
+fillFlag bit isn't counted).
+
+Iteration is complete when the number of bits returned is 0.
+*/
 type Iterator interface {
 	Next() (Word, int)
 }
 
+/*
+Bitwise NOT iterator.
+*/
 type notIterator struct {
 	x Iterator
 }
-
 func (itr *notIterator) Next() (Word, int) {
 	w, n := itr.x.Next()
 	return ^fillFlag ^ w, n
 }
-
 func Not(x Iterator) Iterator {
 	return &notIterator{x}
 }
 
-
+/*
+Bitwise AND iterator.
+*/
 type andIterator struct {
 	x Iterator
 	y Iterator
 }
-
 func (itr *andIterator) Next() (Word, int) {
-	var n int
 	wx, nx := itr.x.Next()
 	wy, ny := itr.y.Next()
-	if nx < ny {
-		n = nx
-	} else {
-		n = ny
-	}
-	return wx & wy, n
+	return wx & wy, min(nx, ny)
 }
-
 func And(x, y Iterator) Iterator {
 	return &andIterator{x, y}
 }
 
-
+/*
+Bitwise OR iterator.
+*/
 type orIterator struct {
 	x Iterator
 	y Iterator
 }
-
 func (itr *orIterator) Next() (Word, int) {
-	var n int
 	wx, nx := itr.x.Next()
 	wy, ny := itr.y.Next()
-	if nx < ny {
-		n = nx
-	} else {
-		n = ny
-	}
-	return wx | wy, n
+	return wx | wy, min(nx, ny)
 }
-
 func Or(x, y Iterator) Iterator {
 	return &orIterator{x, y}
 }
 
-
+/*
+Bitwise XOR iterator.
+*/
 type xorIterator struct {
 	x Iterator
 	y Iterator
 }
-
 func (itr *xorIterator) Next() (Word, int) {
-	var n int
 	wx, nx := itr.x.Next()
 	wy, ny := itr.y.Next()
-	if nx < ny {
-		n = nx
-	} else {
-		n = ny
-	}
-	return wx ^ wy, n
+	return wx ^ wy, min(nx, ny)
 }
-
 func Xor(x, y Iterator) Iterator {
 	return &xorIterator{x, y}
 }
 
-
+/*
+Count all bits set to 1 in iterator.
+*/
 func Count(itr Iterator) int {
+	const mask = ^Word(0)
 	count := 0
 	for {
 		w, n := itr.Next()
@@ -112,13 +107,16 @@ func Count(itr Iterator) int {
 			break
 		}
 		if n < bitLength - 1 {
-			w &= (1 << uint(n)) - 1
+			w &= mask >> uint(bitLength - n)
 		}
 		count += bits.OnesCount(uint(w))
 	}
 	return count
 }
 
+/*
+Return channel of integer indices of bits set to 1 in iterator.
+*/
 func Indices(itr Iterator) chan int {
 	ch := make(chan int)
 	go func() {
@@ -130,7 +128,7 @@ func Indices(itr Iterator) chan int {
 			}
 			for i := 0; i < n; i++ {
 				if w & (1 << uint(i)) != 0 {
-					ch <- id + int(i)
+					ch <- id + i
 				}
 			}
 			id += bitLength - 1
@@ -138,4 +136,14 @@ func Indices(itr Iterator) chan int {
 		close(ch)
 	}()
 	return ch
+}
+
+/*
+Return minimum of x and y.
+*/
+func min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
 }
