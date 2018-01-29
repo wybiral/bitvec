@@ -27,6 +27,17 @@ type Iterator interface {
 	Next() (Word, int)
 }
 
+// Empty iterator
+type emptyIterator struct {}
+
+func (itr emptyIterator) Next() (Word, int) {
+	return Word(0), 0
+}
+
+func EmptyIterator() Iterator {
+	return emptyIterator{}
+}
+
 // Iterator implementation for bitvectors
 type bitvecIterator struct {
 	b     *Bitvec // bitvector being iterated
@@ -105,7 +116,7 @@ type orIterator struct {
 func (itr *orIterator) Next() (Word, int) {
 	wx, nx := itr.x.Next()
 	wy, ny := itr.y.Next()
-	return wx | wy, min(nx, ny)
+	return wx | wy, max(nx, ny)
 }
 
 func Or(x, y Iterator) Iterator {
@@ -121,7 +132,7 @@ type xorIterator struct {
 func (itr *xorIterator) Next() (Word, int) {
 	wx, nx := itr.x.Next()
 	wy, ny := itr.y.Next()
-	return wx ^ wy, min(nx, ny)
+	return wx ^ wy, max(nx, ny)
 }
 
 func Xor(x, y Iterator) Iterator {
@@ -170,6 +181,14 @@ func Indices(itr Iterator) chan int {
 // Return minimum of x and y.
 func min(x, y int) int {
 	if x < y {
+		return x
+	}
+	return y
+}
+
+// Return maximum of x and y.
+func max(x, y int) int {
+	if x > y {
 		return x
 	}
 	return y
