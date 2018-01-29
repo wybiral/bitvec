@@ -38,6 +38,26 @@ func EmptyIterator() Iterator {
 	return emptyIterator{}
 }
 
+// Zero iterator
+type zeroIterator struct {
+	n int
+}
+
+func (itr zeroIterator) Next() (Word, int) {
+	n := bitLength - 1
+	if itr.n >= n {
+		itr.n -= n
+	} else {
+		n = itr.n
+		itr.n = 0
+	}
+	return Word(0), n
+}
+
+func ZeroIterator(n int) Iterator {
+	return zeroIterator{n: n}
+}
+
 // Iterator implementation for bitvectors
 type bitvecIterator struct {
 	b     *Bitvec // bitvector being iterated
